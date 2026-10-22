@@ -585,27 +585,32 @@
         .btn-secondary { background: transparent; color: var(--text-color); border: 1px solid rgba(255,255,255,0.2); }
         .btn-primary:hover, .btn-secondary:hover { opacity: 0.8; }
 
-        /* --- 跨年倒计时模式 --- */
+        /* --- 倒计时 / 计时（秒表）共用：8~9 张卡片的窄排版 --- */
 
         /* 不足 100 天时隐藏百位；不足 1 天时连"天"一起隐藏，只留 时:分:秒 */
         .clock.hide-day-hundreds .day-card.is-hundreds { display: none; }
         .clock.hide-days .day-card,
         .clock.hide-days .day-divider { display: none; }
 
-        /* 倒计时比时钟多一组天数，整体收窄一档以容纳 8~9 张卡片 */
-        body.countdown-mode {
+        /* 比时钟多一组天数，整体收窄一档以容纳 8~9 张卡片 */
+        body.countdown-mode,
+        body.stopwatch-mode.show-days {
             --card-width: 9.5vw;
             --card-height: 14.5vw;
             --font-size: 11vw;
         }
-        body.countdown-mode.days-hundreds {
+        body.countdown-mode.days-hundreds,
+        body.stopwatch-mode.show-days.days-hundreds {
             --card-width: 8.2vw;
             --card-height: 12.6vw;
             --font-size: 9.6vw;
         }
-        body.countdown-mode .clock { gap: 0.9vw; padding: 0 3vw; }
-        body.countdown-mode .divider { font-size: 6vw; }
-        body.countdown-mode .date-part { color: var(--accent-color); }
+        body.countdown-mode .clock,
+        body.stopwatch-mode.show-days .clock { gap: 0.9vw; padding: 0 3vw; }
+        body.countdown-mode .divider,
+        body.stopwatch-mode.show-days .divider { font-size: 6vw; }
+        body.countdown-mode .date-part,
+        body.stopwatch-mode .date-part { color: var(--accent-color); }
 
         /* 归零时的呼吸光效（录跨年视频最需要的一帧） */
         body.celebrate .flip-card { animation: celebrate 1.6s ease-in-out infinite; }
@@ -666,6 +671,14 @@
         }
         .cd-grid .theme-option:hover { background: rgba(128, 128, 128, 0.2); }
         .cd-date { opacity: 0.6; font-size: 0.82rem; margin-left: 6px; }
+        .sw-time {
+            font-size: 2rem;
+            font-weight: bold;
+            letter-spacing: 0.06em;
+            margin: 4px 0 16px;
+            font-variant-numeric: tabular-nums;
+            color: var(--accent-color);
+        }
         .cd-pane { display: none; }
         .cd-pane.open { display: block; }
         .cd-pane .modal-input { margin: 8px 0; }
@@ -775,25 +788,30 @@
                 transform-origin: top right;
             }
             
-            /* 倒计时在竖屏下压缩行高，避免 8 张卡片超出屏幕 */
-            body.countdown-mode {
+            /* 倒计时/计时在竖屏下压缩行高，避免 8 张卡片超出屏幕 */
+            body.countdown-mode,
+            body.stopwatch-mode.show-days {
                 /* 同时受宽高约束：屏幕偏"方"时长宽比不会把 4 行卡片顶出视口 */
                 --card-height: min(30vw, 16.5vh);
                 --font-size: min(23vw, 12.6vh);
             }
-            body.countdown-mode .clock {
+            body.countdown-mode .clock,
+            body.stopwatch-mode.show-days .clock {
                 gap: 2vh 3vw;
                 padding: 0 6vw;
             }
             /* 说明文字改为两行，避免和 天:时:分:秒 挤在同一行被截断 */
-            body.countdown-mode .date-container {
+            body.countdown-mode .date-container,
+            body.stopwatch-mode .date-container {
                 flex-direction: column;
                 height: auto;
                 gap: 0.6vh;
                 margin-bottom: 2.5vh;
             }
             body.countdown-mode .date-part,
-            body.countdown-mode .week-part {
+            body.countdown-mode .week-part,
+            body.stopwatch-mode .date-part,
+            body.stopwatch-mode .week-part {
                 font-size: 4.4vw;
             }
             /* 竖屏放不下三组天数，百位始终隐藏（天数 ≤ 99 时不受影响） */
@@ -849,6 +867,9 @@
         <button class="control-btn" id="btnMode" onclick="toggleMode()" title="设置倒计时">
             <i class="fas fa-hourglass-half"></i> 倒计时
         </button>
+        <button class="control-btn" id="btnStopwatch" onclick="toggleStopwatch()" title="秒表计时">
+            <i class="fas fa-stopwatch"></i> 计时
+        </button>
         <a class="icon-btn" id="btnGithub" href="https://github.com/1077553201" target="_blank"
            rel="noopener noreferrer" title="作者的 GitHub 主页" aria-label="打开作者的 GitHub 主页">
             <i class="fab fa-github"></i>
@@ -862,7 +883,7 @@
     <!-- 智能提示卡片 -->
     <div id="hintCard" class="hint-card">
         <i class="fas fa-lightbulb hint-icon"></i>
-        <span>提示：点击日期或星期可切换格式，齿轮里还能开跨年倒计时哦！</span>
+        <span>提示：点击日期或星期可切换格式，右上角还能开倒计时和计时。</span>
         <div class="hint-close" onclick="closeHint()">
             <i class="fas fa-times"></i>
         </div>
@@ -1075,6 +1096,26 @@
         </div>
     </div>
 
+    <!-- 计时（秒表）面板 -->
+    <div id="stopwatchModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title">计时</div>
+            <div class="sw-time" id="swModalTime">00:00:00</div>
+            <div class="modal-options">
+                <div class="option-btn" onclick="toggleStopwatchFromPanel()">
+                    <span id="swModalToggle">开始计时</span>
+                </div>
+                <div class="option-btn" onclick="resetStopwatch()">
+                    <span>复位到 00:00:00</span>
+                </div>
+            </div>
+            <div class="modal-btns">
+                <button class="btn-secondary" id="swStopBtn" onclick="stopStopwatch()" style="display:none">回到时钟</button>
+                <button class="btn-secondary" onclick="closeModal('stopwatch')">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- 状态管理 ---
         const STORAGE_KEY = 'web-clock.settings.v1';
@@ -1090,10 +1131,13 @@
         let dateFormat = 'cn-full';
         let weekFormat = 'zh-full';
 
-        let mode = 'clock';            // clock | countdown
+        let mode = 'clock';            // clock | countdown | stopwatch
         let cdTarget = 0;              // 倒计时目标时间戳（绝对毫秒）
         let cdLabel = '';              // 倒计时标题（用户起的名字）
         let cdKind = 'newyear';        // newyear | spring | duration | datetime
+        let swRunning = false;         // 秒表是否正在跑
+        let swStartedAt = 0;           // 本轮起跑时间戳
+        let swElapsed = 0;             // 本轮之前已累计的毫秒
         let syncing = false;           // 是否正在对时
         let celebrated = false;        // 归零提示只弹一次
         let isFirstPaint = true;       // 首帧不做翻页动画，避免刷新时乱翻牌
@@ -1131,6 +1175,7 @@
                     timeSource: timeSource === 'custom' ? 'local' : timeSource,
                     mode: mode,
                     countdown: { target: cdTarget, label: cdLabel, kind: cdKind },
+                    stopwatch: { elapsed: swElapsed, startedAt: swStartedAt, running: swRunning },
                     netOffset: netOffset,
                     netSyncedAt: netSyncedAt
                 }));
@@ -1144,13 +1189,18 @@
             if (s.weekFormat) weekFormat = s.weekFormat;
             if (typeof s.isDateVisible === 'boolean') isDateVisible = s.isDateVisible;
             if (s.timeSource === 'local' || s.timeSource === 'beijing') timeSource = s.timeSource;
-            if (s.mode === 'clock' || s.mode === 'countdown') mode = s.mode;
+            if (s.mode === 'clock' || s.mode === 'countdown' || s.mode === 'stopwatch') mode = s.mode;
             if (s.countdown && typeof s.countdown.target === 'number') {
                 cdTarget = s.countdown.target;
                 cdLabel = s.countdown.label || '';
                 cdKind = s.countdown.kind || 'newyear';
             } else if (typeof s.countdownTarget === 'number') {
                 cdTarget = s.countdownTarget; // 兼容上一个版本只存了时间戳
+            }
+            if (s.stopwatch && typeof s.stopwatch.elapsed === 'number') {
+                swElapsed = Math.max(0, s.stopwatch.elapsed);
+                swRunning = !!s.stopwatch.running && typeof s.stopwatch.startedAt === 'number' && s.stopwatch.startedAt > 0;
+                swStartedAt = swRunning ? s.stopwatch.startedAt : 0;
             }
             if (typeof s.netOffset === 'number') netOffset = s.netOffset;
             if (typeof s.netSyncedAt === 'number') netSyncedAt = s.netSyncedAt;
@@ -1180,7 +1230,8 @@
                 'dateFormat': 'dateFormatModal',
                 'weekFormat': 'weekFormatModal',
                 'theme': 'themeModal',
-                'countdown': 'countdownModal'
+                'countdown': 'countdownModal',
+                'stopwatch': 'stopwatchModal'
             };
             const modal = document.getElementById(modalMap[type]);
             
@@ -1197,6 +1248,8 @@
                 updateOptionSelection('opt-theme-', currentTheme);
             } else if (type === 'countdown') {
                 refreshCountdownModal();
+            } else if (type === 'stopwatch') {
+                refreshStopwatchModal();
             }
 
             modal.classList.add('open');
@@ -1208,7 +1261,8 @@
                 'dateFormat': 'dateFormatModal',
                 'weekFormat': 'weekFormatModal',
                 'theme': 'themeModal',
-                'countdown': 'countdownModal'
+                'countdown': 'countdownModal',
+                'stopwatch': 'stopwatchModal'
             };
             document.getElementById(modalMap[type]).classList.remove('open');
         }
@@ -1392,11 +1446,16 @@
         }
 
         function updateClock() {
-            // 倒计时模式走独立渲染，不显示当前时间
+            // 倒计时 / 计时各自独立渲染，不显示当前时间
             if (mode === 'countdown') {
                 renderCountdown();
                 return;
             }
+            if (mode === 'stopwatch') {
+                renderStopwatch();
+                return;
+            }
+            document.body.classList.remove('show-days');
             clockEl.classList.add('hide-days');        // 时钟模式没有"天"，整组藏掉
             clockEl.classList.remove('hide-day-hundreds');
             document.body.classList.remove('days-hundreds');
@@ -1550,11 +1609,28 @@
         }
 
         function syncModeUI() {
-            const btn = document.getElementById('btnMode');
             const isCountdown = mode === 'countdown';
+            const isStopwatch = mode === 'stopwatch';
+
+            const btn = document.getElementById('btnMode');
             btn.classList.toggle('active', isCountdown);
             btn.title = isCountdown ? '倒计时进行中 · 点击修改' : '设置倒计时';
+
+            const swBtn = document.getElementById('btnStopwatch');
+            swBtn.classList.toggle('active', isStopwatch);
+            if (isStopwatch && swRunning) {
+                swBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停';
+                swBtn.title = '暂停计时';
+            } else if (isStopwatch && swElapsed > 0) {
+                swBtn.innerHTML = '<i class="fas fa-play"></i> 继续';
+                swBtn.title = '继续计时';
+            } else {
+                swBtn.innerHTML = '<i class="fas fa-stopwatch"></i> 计时';
+                swBtn.title = '秒表计时';
+            }
+
             document.body.classList.toggle('countdown-mode', isCountdown);
+            document.body.classList.toggle('stopwatch-mode', isStopwatch);
         }
 
         // --- 倒计时设置面板 ---
@@ -1656,10 +1732,12 @@
 
         // 倒计时进行中，点日期/星期直接进倒计时设置，而不是日期格式
         function openDatePartModal() {
+            if (mode === 'stopwatch') { openModal('stopwatch'); return; }
             openModal(mode === 'countdown' ? 'countdown' : 'dateFormat');
         }
 
         function openWeekPartModal() {
+            if (mode === 'stopwatch') { openModal('stopwatch'); return; }
             openModal(mode === 'countdown' ? 'countdown' : 'weekFormat');
         }
 
@@ -1700,6 +1778,116 @@
                 document.body.classList.add('celebrate');
                 showToast(cdKind === 'newyear' ? targetYearLabel(cdTarget) + ' 新年快乐！' : '倒计时结束', 5000);
             }
+        }
+
+        // --- 计时（秒表） ---
+
+        function swTotalMs() {
+            return swElapsed + (swRunning ? Math.max(0, Date.now() - swStartedAt) : 0);
+        }
+
+        // 00:00:00 / 3 天 04:05:06
+        function swClockText(ms) {
+            const t = Math.floor(ms / 1000);
+            const pad = n => String(n).padStart(2, '0');
+            const days = Math.floor(t / 86400);
+            const text = pad(Math.floor((t % 86400) / 3600)) + ':' +
+                pad(Math.floor((t % 3600) / 60)) + ':' + pad(t % 60);
+            return days > 0 ? days + ' 天 ' + text : text;
+        }
+
+        // 常驻「计时」按钮：时钟/倒计时下点它进秒表，秒表里点它是暂停/继续
+        function toggleStopwatch() {
+            if (mode === 'stopwatch') {
+                if (swRunning) pauseStopwatch(); else resumeStopwatch();
+                return;
+            }
+            setMode('stopwatch');
+            if (!swRunning && swElapsed === 0) resumeStopwatch(); // 全新的表直接开跑
+        }
+
+        function resumeStopwatch() {
+            if (swRunning) return;
+            swStartedAt = Date.now();
+            swRunning = true;
+            syncModeUI();
+            updateClock();
+            saveSettings();
+        }
+
+        function pauseStopwatch() {
+            if (!swRunning) return;
+            swElapsed += Math.max(0, Date.now() - swStartedAt);
+            swRunning = false;
+            swStartedAt = 0;
+            syncModeUI();
+            updateClock();
+            saveSettings();
+            showToast('已暂停 · ' + swClockText(swElapsed));
+        }
+
+        function resetStopwatch() {
+            swElapsed = 0;
+            swRunning = false;
+            swStartedAt = 0;
+            syncModeUI();
+            updateClock();
+            saveSettings();
+            showToast('已复位');
+            if (document.getElementById('stopwatchModal').classList.contains('open')) refreshStopwatchModal();
+        }
+
+        function stopStopwatch() {
+            setMode('clock');
+            closeModal('stopwatch');
+            showToast('已回到时钟');
+        }
+
+        function toggleStopwatchFromPanel() {
+            if (mode !== 'stopwatch') { toggleStopwatch(); return; }
+            if (swRunning) pauseStopwatch(); else resumeStopwatch();
+            refreshStopwatchModal();
+        }
+
+        function refreshStopwatchModal() {
+            const totalMs = swTotalMs();
+            document.getElementById('swModalTime').innerText = swClockText(totalMs);
+            document.getElementById('swModalToggle').innerText = swRunning
+                ? '暂停'
+                : (totalMs > 0 ? '继续计时' : '开始计时');
+            document.getElementById('swStopBtn').style.display = mode === 'stopwatch' ? '' : 'none';
+        }
+
+        function renderStopwatch() {
+            const totalSec = Math.floor(swTotalMs() / 1000);
+            const days = Math.floor(totalSec / 86400);
+            const hours = Math.floor((totalSec % 86400) / 3600);
+            const minutes = Math.floor((totalSec % 3600) / 60);
+            const seconds = totalSec % 60;
+
+            // 超过 24 小时才多出一组「天」，和倒计时共用同一套隐藏规则
+            const showDays = days > 0;
+            clockEl.classList.toggle('hide-days', !showDays);
+            clockEl.classList.toggle('hide-day-hundreds', showDays && days < 100);
+            document.body.classList.toggle('show-days', showDays);
+            document.body.classList.toggle('days-hundreds', showDays && days >= 100);
+
+            if (showDays) {
+                const dd = String(days).padStart(3, '0');
+                flipCard('d0', dd[0]); flipCard('d1', dd[1]); flipCard('d2', dd[2]);
+            }
+
+            const hh = String(hours).padStart(2, '0');
+            const mm = String(minutes).padStart(2, '0');
+            const ss = String(seconds).padStart(2, '0');
+            flipCard('h1', hh[0]); flipCard('h2', hh[1]);
+            flipCard('m1', mm[0]); flipCard('m2', mm[1]);
+            flipCard('s1', ss[0]); flipCard('s2', ss[1]);
+
+            dateContainer.classList.add('visible');
+            datePart.innerText = swRunning ? '计时中' : (totalSec > 0 ? '计时 · 已暂停' : '计时');
+            datePart.title = '点击打开计时面板';
+            weekPart.innerText = showDays ? '天 : 时 : 分 : 秒' : '时 : 分 : 秒';
         }
 
         // --- 真实网络对时 ---
