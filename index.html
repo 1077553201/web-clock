@@ -6,6 +6,15 @@
     <title>极简翻页时钟</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- 首帧前恢复主题，避免刷新时先闪一下深色 -->
+    <script>
+        (function () {
+            try {
+                var s = JSON.parse(localStorage.getItem('web-clock.settings.v1') || '{}');
+                if (s && s.theme) document.documentElement.setAttribute('data-theme', s.theme);
+            } catch (e) { /* 忽略：隐私模式或禁用存储时按默认主题渲染 */ }
+        })();
+    </script>
     <style>
         /* --- 主题变量定义 --- */
         /* 1. 经典深色 (默认) */
@@ -75,6 +84,7 @@
             font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             margin: 0;
             height: 100vh;
+            height: 100dvh; /* 移动端地址栏伸缩时不会跳动 */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -575,6 +585,111 @@
         .btn-secondary { background: transparent; color: var(--text-color); border: 1px solid rgba(255,255,255,0.2); }
         .btn-primary:hover, .btn-secondary:hover { opacity: 0.8; }
 
+        /* --- 跨年倒计时模式 --- */
+
+        /* 不足 100 天时隐藏百位；不足 1 天时连"天"一起隐藏，只留 时:分:秒 */
+        .clock.hide-day-hundreds .day-card.is-hundreds { display: none; }
+        .clock.hide-days .day-card,
+        .clock.hide-days .day-divider { display: none; }
+
+        /* 倒计时比时钟多一组天数，整体收窄一档以容纳 8~9 张卡片 */
+        body.countdown-mode {
+            --card-width: 9.5vw;
+            --card-height: 14.5vw;
+            --font-size: 11vw;
+        }
+        body.countdown-mode.days-hundreds {
+            --card-width: 8.2vw;
+            --card-height: 12.6vw;
+            --font-size: 9.6vw;
+        }
+        body.countdown-mode .clock { gap: 0.9vw; padding: 0 3vw; }
+        body.countdown-mode .divider { font-size: 6vw; }
+        body.countdown-mode .date-part { color: var(--accent-color); }
+
+        /* 归零时的呼吸光效（录跨年视频最需要的一帧） */
+        body.celebrate .flip-card { animation: celebrate 1.6s ease-in-out infinite; }
+        body.celebrate .flip-card:nth-child(2n) { animation-delay: 0.15s; }
+        @keyframes celebrate {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); box-shadow: 0 12px 34px var(--accent-color); }
+        }
+
+        /* 对时请求中的小转圈 */
+        .control-btn.syncing { opacity: 0.6; pointer-events: none; }
+        .control-btn.syncing i { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* --- 轻提示 Toast --- */
+        .toast {
+            position: fixed;
+            top: 78px; /* 让开顶部控制栏 */
+            left: 50%;
+            transform: translate(-50%, -16px);
+            background: rgba(20, 20, 20, 0.82);
+            color: #f5f5f5;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 9px 18px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            line-height: 1.3;
+            z-index: 300;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s, transform 0.25s;
+            max-width: 88vw;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+        /* --- 倒计时设置弹窗 --- */
+        .modal-content { max-height: 86vh; overflow-y: auto; }
+        .modal-subtitle {
+            font-size: 0.78rem;
+            opacity: 0.6;
+            margin: 2px 0 10px;
+            letter-spacing: 0.05em;
+        }
+        .cd-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .cd-grid .theme-option {
+            height: 46px;
+            font-weight: normal;
+            background: rgba(128, 128, 128, 0.1);
+        }
+        .cd-grid .theme-option:hover { background: rgba(128, 128, 128, 0.2); }
+        .cd-date { opacity: 0.6; font-size: 0.82rem; margin-left: 6px; }
+        .cd-pane { display: none; }
+        .cd-pane.open { display: block; }
+        .cd-pane .modal-input { margin: 8px 0; }
+        .cd-pane .btn-primary { width: 100%; padding: 10px; }
+
+        /* 常驻圆形图标按钮（GitHub 等），颜色全部跟随主题变量 */
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            color: inherit;
+            font-size: 1.15rem;
+            text-decoration: none;
+            flex-shrink: 0;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+        .icon-btn:hover {
+            background-color: var(--hover-bg);
+            transform: translateY(-1px);
+        }
+
         /* --- 移动端布局适配 --- */
         
         /* 默认移动端样式 (横屏或宽屏手机) */
@@ -660,6 +775,30 @@
                 transform-origin: top right;
             }
             
+            /* 倒计时在竖屏下压缩行高，避免 8 张卡片超出屏幕 */
+            body.countdown-mode {
+                /* 同时受宽高约束：屏幕偏"方"时长宽比不会把 4 行卡片顶出视口 */
+                --card-height: min(30vw, 16.5vh);
+                --font-size: min(23vw, 12.6vh);
+            }
+            body.countdown-mode .clock {
+                gap: 2vh 3vw;
+                padding: 0 6vw;
+            }
+            /* 说明文字改为两行，避免和 天:时:分:秒 挤在同一行被截断 */
+            body.countdown-mode .date-container {
+                flex-direction: column;
+                height: auto;
+                gap: 0.6vh;
+                margin-bottom: 2.5vh;
+            }
+            body.countdown-mode .date-part,
+            body.countdown-mode .week-part {
+                font-size: 4.4vw;
+            }
+            /* 竖屏放不下三组天数，百位始终隐藏（天数 ≤ 99 时不受影响） */
+            .day-card.is-hundreds { display: none; }
+
             /* 旋转提示可见 */
             .rotate-overlay {
                 display: flex;
@@ -690,9 +829,9 @@
             <button class="control-btn" id="btnCustom" onclick="openModal('customTime')" title="设定自定义起始时间">
                 <i class="fas fa-history"></i> 自定
             </button>
-            
+
             <div class="divider-v"></div>
-            
+
             <button class="control-btn active" onclick="toggleDate()" id="btnDate" title="显示/隐藏日期">
                 <i class="far fa-calendar-alt"></i> 日期
             </button>
@@ -706,6 +845,15 @@
             <div class="divider-v"></div>
         </div>
 
+        <!-- 常驻入口：设置按钮左侧，不随菜单折叠 -->
+        <button class="control-btn" id="btnMode" onclick="toggleMode()" title="设置倒计时">
+            <i class="fas fa-hourglass-half"></i> 倒计时
+        </button>
+        <a class="icon-btn" id="btnGithub" href="https://github.com/1077553201" target="_blank"
+           rel="noopener noreferrer" title="作者的 GitHub 主页" aria-label="打开作者的 GitHub 主页">
+            <i class="fab fa-github"></i>
+        </a>
+
         <button class="toggle-btn" onclick="toggleMenu()" title="设置">
             <i class="fas fa-cog"></i>
         </button>
@@ -714,20 +862,45 @@
     <!-- 智能提示卡片 -->
     <div id="hintCard" class="hint-card">
         <i class="fas fa-lightbulb hint-icon"></i>
-        <span>提示：点击日期或星期可以切换显示格式哦！</span>
+        <span>提示：点击日期或星期可切换格式，齿轮里还能开跨年倒计时哦！</span>
         <div class="hint-close" onclick="closeHint()">
             <i class="fas fa-times"></i>
         </div>
     </div>
 
+    <!-- 轻提示（对时结果 / 模式切换） -->
+    <div class="toast" id="toast"></div>
+
     <!-- 日期显示区域 -->
     <div id="dateContainer" class="date-container visible">
-        <span id="datePart" class="date-part" onclick="openModal('dateFormat')" title="点击切换日期格式">2023年01月01日</span>
-        <span id="weekPart" class="week-part" onclick="openModal('weekFormat')" title="点击切换星期格式">星期日</span>
+        <span id="datePart" class="date-part" onclick="openDatePartModal()" title="点击切换日期格式">2023年01月01日</span>
+        <span id="weekPart" class="week-part" onclick="openWeekPartModal()" title="点击切换星期格式">星期日</span>
     </div>
 
     <!-- 时钟主体 -->
-    <div class="clock">
+    <div class="clock hide-days" id="clock">
+        <!-- 倒计时-天数（时钟模式隐藏；不足 100 天隐藏百位；不足 1 天整组隐藏） -->
+        <div class="flip-card day-card is-hundreds" id="d0" data-val="0">
+            <div class="top"><span class="top-text">0</span></div>
+            <div class="bottom"><span class="bottom-text">0</span></div>
+            <div class="top-flip"><span class="top-flip-text">0</span></div>
+            <div class="bottom-flip"><span class="bottom-flip-text">0</span></div>
+        </div>
+        <div class="flip-card day-card" id="d1" data-val="0">
+            <div class="top"><span class="top-text">0</span></div>
+            <div class="bottom"><span class="bottom-text">0</span></div>
+            <div class="top-flip"><span class="top-flip-text">0</span></div>
+            <div class="bottom-flip"><span class="bottom-flip-text">0</span></div>
+        </div>
+        <div class="flip-card day-card" id="d2" data-val="0">
+            <div class="top"><span class="top-text">0</span></div>
+            <div class="bottom"><span class="bottom-text">0</span></div>
+            <div class="top-flip"><span class="top-flip-text">0</span></div>
+            <div class="bottom-flip"><span class="bottom-flip-text">0</span></div>
+        </div>
+
+        <div class="divider day-divider">:</div>
+
         <!-- 小时 -->
         <div class="flip-card" id="h1" data-val="0">
             <div class="top"><span class="top-text">0</span></div>
@@ -850,26 +1023,155 @@
         </div>
     </div>
 
+    <!-- 倒计时设置弹窗 -->
+    <div id="countdownModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title">倒计时</div>
+
+            <!-- 已有一个未结束的倒计时时，可一键继续 -->
+            <div class="modal-options" id="cdResumeWrap" style="display:none">
+                <div class="option-btn" onclick="resumeCountdown()">
+                    <span id="cdResumeText">继续上次倒计时</span>
+                </div>
+            </div>
+
+            <div class="modal-subtitle">快速开始</div>
+            <div class="theme-grid cd-grid">
+                <div class="theme-option" onclick="startDuration(5)">5 分钟</div>
+                <div class="theme-option" onclick="startDuration(25)">25 分钟</div>
+                <div class="theme-option" onclick="startDuration(60)">1 小时</div>
+                <div class="theme-option" onclick="revealCdPane('custom')">自定义时长…</div>
+            </div>
+
+            <div class="modal-subtitle">倒计时到</div>
+            <div class="modal-options">
+                <div class="option-btn" onclick="startNewYear()">
+                    <span><i class="fas fa-champagne-glasses"></i> 跨年<span class="cd-date" id="cdNewYearDate"></span></span>
+                </div>
+                <div class="option-btn option-lunar" onclick="startSpring()">
+                    <span><i class="fas fa-moon"></i> 春节<span class="cd-date" id="cdSpringDate"></span></span>
+                </div>
+                <div class="option-btn" onclick="revealCdPane('datetime')">
+                    <span><i class="fas fa-calendar-day"></i> 指定时刻…</span>
+                </div>
+            </div>
+
+            <input type="text" id="cdLabelInput" class="modal-input" maxlength="20" placeholder="标题（可选，例如 番茄钟）">
+
+            <div class="cd-pane" id="cdPaneCustom">
+                <input type="number" id="cdMinutes" class="modal-input" min="1" max="9999" placeholder="分钟数，例如 90">
+                <button class="btn-primary" onclick="startCustomDuration()">开始倒计时</button>
+            </div>
+
+            <div class="cd-pane" id="cdPaneDatetime">
+                <input type="datetime-local" id="cdTargetInput" class="modal-input" step="1">
+                <button class="btn-primary" onclick="startCustomDatetime()">开始倒计时</button>
+            </div>
+
+            <div class="modal-btns">
+                <button class="btn-secondary" id="cdStopBtn" onclick="stopCountdown()" style="display:none">回到时钟</button>
+                <button class="btn-secondary" onclick="closeModal('countdown')">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- 状态管理 ---
-        let timeSource = 'local';
-        let timeOffset = 0;
+        const STORAGE_KEY = 'web-clock.settings.v1';
+
+        let timeSource = 'local';      // local | beijing | custom
+        let timeOffset = 0;            // 「自定」模式的起始时间偏移
+        let netOffset = 0;             // 网络对时得到的偏差（服务端时间 - 本机时间）
+        let netSyncedAt = 0;           // 上次对时的时间戳
         let currentTheme = 'dark';
         let isMenuOpen = false;
-        let isDateVisible = true; 
-        
-        let dateFormat = 'cn-full'; 
-        let weekFormat = 'zh-full'; 
+        let isDateVisible = true;
+
+        let dateFormat = 'cn-full';
+        let weekFormat = 'zh-full';
+
+        let mode = 'clock';            // clock | countdown
+        let cdTarget = 0;              // 倒计时目标时间戳（绝对毫秒）
+        let cdLabel = '';              // 倒计时标题（用户起的名字）
+        let cdKind = 'newyear';        // newyear | spring | duration | datetime
+        let syncing = false;           // 是否正在对时
+        let celebrated = false;        // 归零提示只弹一次
+        let isFirstPaint = true;       // 首帧不做翻页动画，避免刷新时乱翻牌
+        let tickTimer = null;
 
         // --- 缓存DOM ---
         const cards = {
+            d0: document.getElementById('d0'), d1: document.getElementById('d1'), d2: document.getElementById('d2'),
             h1: document.getElementById('h1'), h2: document.getElementById('h2'),
             m1: document.getElementById('m1'), m2: document.getElementById('m2'),
             s1: document.getElementById('s1'), s2: document.getElementById('s2'),
         };
+        const clockEl = document.getElementById('clock');
         const dateContainer = document.getElementById('dateContainer');
         const datePart = document.getElementById('datePart');
         const weekPart = document.getElementById('weekPart');
+
+        // --- 设置持久化（localStorage） ---
+        function loadSettings() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {};
+            } catch (e) {
+                return {}; // 存储被禁用或内容损坏时退回默认值
+            }
+        }
+
+        function saveSettings() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    theme: currentTheme,
+                    dateFormat: dateFormat,
+                    weekFormat: weekFormat,
+                    isDateVisible: isDateVisible,
+                    // 自定时间是临时状态，不持久化，避免下次打开只显示一个偏移值
+                    timeSource: timeSource === 'custom' ? 'local' : timeSource,
+                    mode: mode,
+                    countdown: { target: cdTarget, label: cdLabel, kind: cdKind },
+                    netOffset: netOffset,
+                    netSyncedAt: netSyncedAt
+                }));
+            } catch (e) { /* 隐私模式下静默失败 */ }
+        }
+
+        function applySettings() {
+            const s = loadSettings();
+            if (s.theme) currentTheme = s.theme;
+            if (s.dateFormat) dateFormat = s.dateFormat;
+            if (s.weekFormat) weekFormat = s.weekFormat;
+            if (typeof s.isDateVisible === 'boolean') isDateVisible = s.isDateVisible;
+            if (s.timeSource === 'local' || s.timeSource === 'beijing') timeSource = s.timeSource;
+            if (s.mode === 'clock' || s.mode === 'countdown') mode = s.mode;
+            if (s.countdown && typeof s.countdown.target === 'number') {
+                cdTarget = s.countdown.target;
+                cdLabel = s.countdown.label || '';
+                cdKind = s.countdown.kind || 'newyear';
+            } else if (typeof s.countdownTarget === 'number') {
+                cdTarget = s.countdownTarget; // 兼容上一个版本只存了时间戳
+            }
+            if (typeof s.netOffset === 'number') netOffset = s.netOffset;
+            if (typeof s.netSyncedAt === 'number') netSyncedAt = s.netSyncedAt;
+
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            document.body.setAttribute('data-theme', currentTheme);
+            dateContainer.classList.toggle('visible', isDateVisible);
+            document.getElementById('btnDate').classList.toggle('active', isDateVisible);
+            updateBtnState();
+            syncModeUI();
+        }
+
+        // --- 轻提示 ---
+        let toastTimer = null;
+        function showToast(msg, duration = 2200) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+        }
 
         // --- 模态框管理 ---
         function openModal(type) {
@@ -877,7 +1179,8 @@
                 'customTime': 'customTimeModal',
                 'dateFormat': 'dateFormatModal',
                 'weekFormat': 'weekFormatModal',
-                'theme': 'themeModal'
+                'theme': 'themeModal',
+                'countdown': 'countdownModal'
             };
             const modal = document.getElementById(modalMap[type]);
             
@@ -892,6 +1195,8 @@
                 updateOptionSelection('opt-week-', weekFormat);
             } else if (type === 'theme') {
                 updateOptionSelection('opt-theme-', currentTheme);
+            } else if (type === 'countdown') {
+                refreshCountdownModal();
             }
 
             modal.classList.add('open');
@@ -902,7 +1207,8 @@
                 'customTime': 'customTimeModal',
                 'dateFormat': 'dateFormatModal',
                 'weekFormat': 'weekFormatModal',
-                'theme': 'themeModal'
+                'theme': 'themeModal',
+                'countdown': 'countdownModal'
             };
             document.getElementById(modalMap[type]).classList.remove('open');
         }
@@ -918,6 +1224,7 @@
             dateFormat = format;
             updateClock();
             updateOptionSelection('opt-date-', format);
+            saveSettings();
             setTimeout(() => closeModal('dateFormat'), 200);
         }
 
@@ -925,13 +1232,16 @@
             weekFormat = format;
             updateClock();
             updateOptionSelection('opt-week-', format);
+            saveSettings();
             setTimeout(() => closeModal('weekFormat'), 200);
         }
 
         function selectTheme(theme) {
             currentTheme = theme;
+            document.documentElement.setAttribute('data-theme', theme);
             document.body.setAttribute('data-theme', theme);
             updateOptionSelection('opt-theme-', theme);
+            saveSettings();
             setTimeout(() => closeModal('theme'), 200);
         }
 
@@ -1020,9 +1330,16 @@
         // --- 核心时钟逻辑 ---
         
         function setTimeSource(source) {
+            // 「网络」= 先向时间服务器对时，成功后再切换；失败也降级为北京时间
+            if (source === 'beijing') {
+                syncNetworkTime();
+                return;
+            }
             timeSource = source;
             updateBtnState();
-            updateClock(); 
+            updateClock();
+            saveSettings();
+            showToast(source === 'custom' ? '已切换到自定义起始时间' : '已切换到本地时间');
         }
 
         function updateBtnState() {
@@ -1050,24 +1367,42 @@
                 dateContainer.classList.add('visible');
                 btn.classList.add('active');
             } else {
-                dateContainer.classList.remove('visible');
+                // 倒计时模式下说明文字是唯一线索，不能跟着一起藏掉
+                dateContainer.classList.toggle('visible', mode === 'countdown');
                 btn.classList.remove('active');
             }
             updateClock();
+            saveSettings();
         }
 
-        function getCurrentDisplayTime() {
-            const now = new Date();
-            if (timeSource === 'custom') return new Date(now.getTime() + timeOffset);
+        // 当前「显示用」的绝对时间戳（已叠加对时偏差 / 自定偏移）
+        function currentEpoch() {
+            if (timeSource === 'custom') return Date.now() + timeOffset;
+            if (timeSource === 'beijing') return Date.now() + netOffset;
+            return Date.now();
+        }
+
+        // 把绝对时间换算成「按目标时区读数」的 Date，getHours() 等可直接使用
+        function displayDate(epoch) {
             if (timeSource === 'beijing') {
-                const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-                return new Date(utc + (3600000 * 8));
+                const localOffset = new Date(epoch).getTimezoneOffset(); // 分钟，UTC = 本地 + offset
+                return new Date(epoch + (localOffset + 480) * 60000);
             }
-            return now;
+            return new Date(epoch);
         }
 
         function updateClock() {
-            const now = getCurrentDisplayTime();
+            // 倒计时模式走独立渲染，不显示当前时间
+            if (mode === 'countdown') {
+                renderCountdown();
+                return;
+            }
+            clockEl.classList.add('hide-days');        // 时钟模式没有"天"，整组藏掉
+            clockEl.classList.remove('hide-day-hundreds');
+            document.body.classList.remove('days-hundreds');
+            dateContainer.classList.toggle('visible', isDateVisible);
+
+            const now = displayDate(currentEpoch());
 
             const h = String(now.getHours()).padStart(2, '0');
             const m = String(now.getMinutes()).padStart(2, '0');
@@ -1077,6 +1412,7 @@
             flipCard('s1', s[0]); flipCard('s2', s[1]);
 
             if (isDateVisible) {
+                datePart.title = '点击切换日期格式';
                 let dateStr = '';
                 const Y = now.getFullYear();
                 const M = String(now.getMonth() + 1).padStart(2, '0');
@@ -1110,6 +1446,351 @@
             }
         }
 
+        // --- 倒计时：跨年 / 春节 / 时长 / 指定时刻 ---
+
+        // 下一个「北京时间 1 月 1 日 00:00:00」的绝对时间戳
+        function nextNewYearTs(fromMs) {
+            const bjYear = new Date(fromMs + 8 * 3600000).getUTCFullYear();
+            let ts = Date.UTC(bjYear + 1, 0, 1) - 8 * 3600000;
+            if (ts <= fromMs) ts = Date.UTC(bjYear + 2, 0, 1) - 8 * 3600000;
+            return ts;
+        }
+
+        // 春节（正月初一）对照表：浏览器内置中国历在个别年份会差一天
+        // （例如 2027 年 ICU 算成 2/7，实际为 2/6），常用年份以官方历法为准
+        const SPRING_FESTIVAL = {
+            2025: '01-29', 2026: '02-17', 2027: '02-06', 2028: '01-26', 2029: '02-13',
+            2030: '02-03', 2031: '01-23', 2032: '02-11', 2033: '01-31', 2034: '02-19',
+            2035: '02-08', 2036: '01-28', 2037: '02-15', 2038: '02-04', 2039: '01-24',
+            2040: '02-12'
+        };
+
+        function chineseNewYearTs(year) {
+            const md = SPRING_FESTIVAL[year];
+            if (md) {
+                const month = Number(md.slice(0, 2));
+                const day = Number(md.slice(3, 5));
+                return Date.UTC(year, month - 1, day) - 8 * 3600000; // 北京时间零点
+            }
+
+            // 表外年份：退回浏览器内置中国历逐日扫描（个别年份可能差一天）
+            try {
+                const fmt = new Intl.DateTimeFormat('en-u-ca-chinese', {
+                    timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric'
+                });
+                for (let i = 0; i <= 40; i++) {
+                    const d = new Date(Date.UTC(year, 0, 21 + i, 4)); // 取该日北京中午
+                    const parts = fmt.formatToParts(d);
+                    const m = Number((parts.find(p => p.type === 'month') || {}).value);
+                    const day = Number((parts.find(p => p.type === 'day') || {}).value);
+                    if (m === 1 && day === 1) {
+                        return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - 8 * 3600000;
+                    }
+                }
+            } catch (e) { /* 浏览器缺该历法数据时降级 */ }
+            return NaN;
+        }
+
+        function nextSpringFestivalTs(fromMs) {
+            const bjYear = new Date(fromMs + 8 * 3600000).getUTCFullYear();
+            for (let y = bjYear; y <= bjYear + 2; y++) {
+                const ts = chineseNewYearTs(y);
+                if (isFinite(ts) && ts > fromMs) return ts;
+            }
+            return NaN;
+        }
+
+        function targetYearLabel(ts) {
+            return new Date(ts + 8 * 3600000).getUTCFullYear();
+        }
+
+        // 北京时间下的 YYYY-MM-DD，用于弹窗里提示目标日期
+        function formatBjDate(ts) {
+            const d = new Date(ts + 8 * 3600000);
+            return d.getUTCFullYear() + '-' +
+                String(d.getUTCMonth() + 1).padStart(2, '0') + '-' +
+                String(d.getUTCDate()).padStart(2, '0');
+        }
+
+        // 目标过期超过 12 小时才滚到下一次（跨年夜/春节当晚刚过时保留 00:00:00）
+        function ensureCountdownTarget() {
+            const nowMs = Date.now();
+            const stale = !cdTarget || cdTarget < nowMs - 12 * 3600000;
+            if (cdKind === 'spring' && stale) {
+                const ts = nextSpringFestivalTs(nowMs);
+                if (isFinite(ts)) { cdTarget = ts; return cdTarget; }
+            }
+            if ((cdKind === 'newyear' || cdKind === 'spring' || !cdTarget) && stale) {
+                cdKind = 'newyear';
+                cdTarget = nextNewYearTs(nowMs);
+            }
+            return cdTarget;
+        }
+
+        // 倒计时期间显示在日期区的那行说明
+        function cdCaption() {
+            if (cdKind === 'newyear') return '距离 ' + targetYearLabel(cdTarget) + ' 新年';
+            if (cdKind === 'spring') return '距离 ' + targetYearLabel(cdTarget) + ' 春节';
+            return cdLabel || '倒计时';
+        }
+
+        // 常驻按钮只负责打开设置面板，进出倒计时都在面板里完成
+        function toggleMode() {
+            openModal('countdown');
+        }
+
+        function setMode(next) {
+            mode = next;
+            celebrated = false;
+            document.body.classList.remove('celebrate');
+            if (mode === 'countdown') ensureCountdownTarget();
+            syncModeUI();
+            updateClock();
+            saveSettings();
+        }
+
+        function syncModeUI() {
+            const btn = document.getElementById('btnMode');
+            const isCountdown = mode === 'countdown';
+            btn.classList.toggle('active', isCountdown);
+            btn.title = isCountdown ? '倒计时进行中 · 点击修改' : '设置倒计时';
+            document.body.classList.toggle('countdown-mode', isCountdown);
+        }
+
+        // --- 倒计时设置面板 ---
+
+        function startCountdown(target, label, kind) {
+            if (!isFinite(target)) { showToast('这个时间点算不出来'); return; }
+            if (target <= Date.now()) { showToast('目标时间必须晚于现在'); return; }
+            cdTarget = target;
+            cdLabel = label || '';
+            cdKind = kind;
+            setMode('countdown');
+            closeModal('countdown');
+            showToast('开始倒计时 · ' + cdCaption(), 2400);
+        }
+
+        function startDuration(minutes) {
+            if (!isFinite(minutes) || minutes <= 0) return;
+            startCountdown(Date.now() + minutes * 60000, minutes + ' 分钟', 'duration');
+        }
+
+        function startNewYear() {
+            startCountdown(nextNewYearTs(Date.now()), '', 'newyear');
+        }
+
+        function startSpring() {
+            const ts = nextSpringFestivalTs(Date.now());
+            if (!isFinite(ts)) { showToast('这台设备的浏览器缺少农历数据，算不出春节', 3200); return; }
+            startCountdown(ts, '', 'spring');
+        }
+
+        function startCustomDuration() {
+            const minutes = Number(document.getElementById('cdMinutes').value);
+            if (!isFinite(minutes) || minutes <= 0) { showToast('请填一个大于 0 的分钟数'); return; }
+            const label = document.getElementById('cdLabelInput').value.trim() || (minutes + ' 分钟');
+            startCountdown(Date.now() + minutes * 60000, label, 'duration');
+        }
+
+        function startCustomDatetime() {
+            const value = document.getElementById('cdTargetInput').value;
+            if (!value) { showToast('请先选一个时刻'); return; }
+            const ts = new Date(value).getTime();
+            if (!isFinite(ts)) { showToast('时间格式不对'); return; }
+            startCountdown(ts, document.getElementById('cdLabelInput').value.trim(), 'datetime');
+        }
+
+        function resumeCountdown() {
+            setMode('countdown');
+            closeModal('countdown');
+            showToast('继续倒计时 · ' + cdCaption());
+        }
+
+        function stopCountdown() {
+            setMode('clock');
+            closeModal('countdown');
+            showToast('已回到时钟');
+        }
+
+        // 「自定义时长」「指定时刻」两个输入面板按需展开，同一时间只开一个
+        function revealCdPane(which) {
+            const custom = document.getElementById('cdPaneCustom');
+            const dt = document.getElementById('cdPaneDatetime');
+            const openCustom = which === 'custom' && !custom.classList.contains('open');
+            const openDt = which === 'datetime' && !dt.classList.contains('open');
+            custom.classList.toggle('open', openCustom);
+            dt.classList.toggle('open', openDt);
+
+            if (openCustom) {
+                const input = document.getElementById('cdMinutes');
+                input.value = '';
+                input.focus({ preventScroll: true });
+            }
+            if (openDt) {
+                const input = document.getElementById('cdTargetInput');
+                const oneHourLater = new Date(Date.now() + 3600000 - new Date().getTimezoneOffset() * 60000);
+                input.value = oneHourLater.toISOString().slice(0, 19);
+                input.focus({ preventScroll: true });
+            }
+        }
+
+        function refreshCountdownModal() {
+            const now = Date.now();
+            document.getElementById('cdNewYearDate').innerText = formatBjDate(nextNewYearTs(now));
+
+            const spring = nextSpringFestivalTs(now);
+            document.getElementById('cdSpringDate').innerText =
+                isFinite(spring) ? formatBjDate(spring) : '农历数据不可用';
+
+            document.getElementById('cdStopBtn').style.display = mode === 'countdown' ? '' : 'none';
+
+            const canResume = mode === 'clock' && cdTarget > now;
+            document.getElementById('cdResumeWrap').style.display = canResume ? '' : 'none';
+            if (canResume) document.getElementById('cdResumeText').innerText = '继续 · ' + cdCaption();
+
+            document.getElementById('cdPaneCustom').classList.remove('open');
+            document.getElementById('cdPaneDatetime').classList.remove('open');
+            document.getElementById('cdLabelInput').value =
+                (cdKind === 'duration' || cdKind === 'datetime') ? cdLabel : '';
+        }
+
+        // 倒计时进行中，点日期/星期直接进倒计时设置，而不是日期格式
+        function openDatePartModal() {
+            openModal(mode === 'countdown' ? 'countdown' : 'dateFormat');
+        }
+
+        function openWeekPartModal() {
+            openModal(mode === 'countdown' ? 'countdown' : 'weekFormat');
+        }
+
+        function renderCountdown() {
+            ensureCountdownTarget();
+            const remainMs = Math.max(0, cdTarget - currentEpoch());
+            const total = Math.ceil(remainMs / 1000);
+            const days = Math.floor(total / 86400);
+            const hours = Math.floor((total % 86400) / 3600);
+            const minutes = Math.floor((total % 3600) / 60);
+            const seconds = total % 60;
+
+            const dd = String(days).padStart(3, '0');
+            const hh = String(hours).padStart(2, '0');
+            const mm = String(minutes).padStart(2, '0');
+            const ss = String(seconds).padStart(2, '0');
+
+            // 不足 100 天藏百位，不足 1 天藏整组「天」，最后一秒刚好是 00:00:00
+            clockEl.classList.toggle('hide-days', days === 0);
+            clockEl.classList.toggle('hide-day-hundreds', days < 100);
+            document.body.classList.toggle('days-hundreds', days >= 100);
+
+            flipCard('d0', dd[0]); flipCard('d1', dd[1]); flipCard('d2', dd[2]);
+            flipCard('h1', hh[0]); flipCard('h2', hh[1]);
+            flipCard('m1', mm[0]); flipCard('m2', mm[1]);
+            flipCard('s1', ss[0]); flipCard('s2', ss[1]);
+
+            // 倒计时的说明必须常驻，否则一排数字看不出在数什么
+            dateContainer.classList.add('visible');
+            datePart.innerText = cdCaption();
+            datePart.title = '点击修改倒计时';
+            weekPart.innerText = remainMs > 0
+                ? (days > 0 ? '天 : 时 : 分 : 秒' : '时 : 分 : 秒')
+                : (cdKind === 'newyear' ? '新年快乐' : '时间到');
+
+            if (remainMs === 0 && !celebrated) {
+                celebrated = true;
+                document.body.classList.add('celebrate');
+                showToast(cdKind === 'newyear' ? targetYearLabel(cdTarget) + ' 新年快乐！' : '倒计时结束', 5000);
+            }
+        }
+
+        // --- 真实网络对时 ---
+        // 多源竞速：谁先返回合法时间用谁，单源失败不影响其余
+        const TIME_SOURCES = [
+            {
+                name: '淘宝',
+                url: 'https://api.m.taobao.com/rest/api3.do?api=mtop.common.getTimestamp',
+                read: j => Number(j && j.data && j.data.t)
+            },
+            {
+                name: 'timeapi.io',
+                url: 'https://timeapi.io/api/Time/current/zone?timeZone=Asia/Shanghai',
+                // 它返回的是北京时间各字段，按 UTC 拼出再减 8 小时即得绝对时间
+                read: j => (j && j.year)
+                    ? Date.UTC(j.year, j.month - 1, j.day, j.hour, j.minute, j.seconds, j.milliSeconds || 0) - 8 * 3600000
+                    : NaN
+            },
+            {
+                name: 'worldtimeapi',
+                url: 'https://worldtimeapi.org/api/ip',
+                read: j => (j && j.unixtime) ? j.unixtime * 1000 : NaN
+            }
+        ];
+
+        async function fetchServerTime(src, timeoutMs = 4000) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+            const start = performance.now();
+            try {
+                const res = await fetch(src.url, { signal: ctrl.signal, cache: 'no-store', mode: 'cors' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                const rtt = performance.now() - start;
+                const server = src.read(json);
+                if (!isFinite(server) || !server) throw new Error('返回数据不可解析');
+                return { name: src.name, server: server, rtt: rtt };
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        async function syncNetworkTime() {
+            if (syncing) return;
+            syncing = true;
+            const btn = document.getElementById('btnBeijing');
+            btn.classList.add('syncing');
+            try {
+                const result = await Promise.any(TIME_SOURCES.map(src => fetchServerTime(src)));
+                // 单程延迟按往返的一半估算
+                netOffset = result.server + result.rtt / 2 - Date.now();
+                netSyncedAt = Date.now();
+                timeSource = 'beijing';
+                updateBtnState();
+                updateClock();
+                saveSettings();
+                const drift = Math.round(netOffset);
+                showToast('已对时（' + result.name + '）· 本机偏差 ' + (drift > 0 ? '+' : '') + drift + ' ms');
+            } catch (e) {
+                // 全部源都失败：仍按 UTC+8 显示，但不假装对过时
+                timeSource = 'beijing';
+                updateBtnState();
+                updateClock();
+                showToast(netOffset ? '对时失败，沿用上次同步结果' : '对时失败，已回退本机计算的北京时间', 3000);
+            } finally {
+                syncing = false;
+                btn.classList.remove('syncing');
+            }
+        }
+
+        // --- 秒边界对齐的计时器 ---
+        // setInterval 会累积误差；这里每次只排到「下一个整秒 +15ms」，
+        // 标签页切回或系统休眠唤醒后还能立刻补一帧并重新对齐
+        function stopTicker() {
+            if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
+        }
+
+        function scheduleTick() {
+            stopTicker();
+            const delay = 1000 - (Date.now() % 1000) + 15;
+            tickTimer = setTimeout(() => {
+                updateClock();
+                scheduleTick();
+            }, delay);
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) { updateClock(); scheduleTick(); }
+        });
+        window.addEventListener('focus', () => { updateClock(); scheduleTick(); });
+
         // --- UI & 翻页动画 ---
         function toggleMenu() {
             const wrapper = document.getElementById('controlsWrapper');
@@ -1139,6 +1820,17 @@
             const currentValue = card.getAttribute('data-val');
             if (currentValue === newValue) return;
 
+            if (isFirstPaint) {
+                // 首帧直接落位，否则刷新时九张卡片会从 0 集体翻一遍
+                card.setAttribute('data-val', newValue);
+                card.querySelectorAll('span').forEach(span => span.innerText = newValue);
+                return;
+            }
+
+            // 立即记账：卡片被 display:none 或动画被跳帧时 animationend 可能不触发，
+            // 若等到动画结束再写 data-val，下一次比较就会拿到过期的旧值
+            card.setAttribute('data-val', newValue);
+
             const top = card.querySelector('.top .top-text');
             const bottom = card.querySelector('.bottom .bottom-text');
             const topFlip = card.querySelector('.top-flip .top-flip-text');
@@ -1159,31 +1851,22 @@
                 topFlip.innerText = newValue;
                 bottomFlip.innerText = newValue;
                 card.classList.remove('flipping');
-                card.setAttribute('data-val', newValue);
-                card.querySelector('.bottom-flip').removeEventListener('animationend', onAnimationEnd);
+                card._flipEnd = null;
             };
-            
-            card.querySelector('.bottom-flip').addEventListener('animationend', onAnimationEnd);
+
+            // 同一张卡片在动画没播完时又被翻一次（例如切模式），先摘掉旧监听，
+            // 否则旧回调会把卡片刷回上一个数字，闪一下
+            const bottomFlipEl = card.querySelector('.bottom-flip');
+            if (card._flipEnd) bottomFlipEl.removeEventListener('animationend', card._flipEnd);
+            card._flipEnd = onAnimationEnd;
+            bottomFlipEl.addEventListener('animationend', onAnimationEnd);
         }
 
         (function init() {
-            let now = new Date(); 
-            const h = String(now.getHours()).padStart(2, '0');
-            const m = String(now.getMinutes()).padStart(2, '0');
-            const s = String(now.getSeconds()).padStart(2, '0');
-            
-            const setVal = (id, val) => {
-                const card = cards[id];
-                card.setAttribute('data-val', val);
-                card.querySelectorAll('span').forEach(span => span.innerText = val);
-            };
-
-            setVal('h1', h[0]); setVal('h2', h[1]);
-            setVal('m1', m[0]); setVal('m2', m[1]);
-            setVal('s1', s[0]); setVal('s2', s[1]);
-
-            setInterval(updateClock, 1000);
-            updateClock(); 
+            applySettings();   // 恢复上次的主题 / 日期格式 / 时间源 / 模式
+            updateClock();     // 首帧直接落位，不播翻页动画
+            isFirstPaint = false;
+            scheduleTick();    // 之后按整秒边界对齐推进
         })();
     </script>
 </body>

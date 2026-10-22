@@ -1,0 +1,8 @@
+# Agent 工作目录（会话记忆、临时产物），不入库
+.workbuddy/
+
+# 系统/编辑器杂项
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
